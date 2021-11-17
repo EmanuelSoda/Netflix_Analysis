@@ -262,3 +262,32 @@ data %>%
   theme(legend.position = "none") + 
   ggtitle("Duration in minutes of Movies over time")
 ```
+
+
+
+```{r Duration Category over time, fig.height=12, fig.width=15}
+category <- 
+  data %>% 
+  summarise(all_names = paste(listed_in, collapse = ", ")) %>%  
+  str_split(., ", ", ) %>%  
+  unlist() %>%  
+  unique()  %>% 
+  as.vector()
+
+data %>% 
+  mutate(listed_in = as.character(listed_in)) %>% 
+  mutate(category = if_else(condition = gsub(',.*','', listed_in) %in% category,
+                            true = gsub(',.*','', listed_in),
+                            false = "Not_Present"))  %>% 
+  group_by(category) %>%  
+  count() %>%   
+  
+  ggplot(., aes(x = n, y = reorder(category, -n))) +
+  geom_bar(stat="identity", fill ="steelblue", col ="black") +
+  #scale_fill_brewer(palette = "Set3") +
+  theme_light() +
+  xlab("Number of item") +
+  ylab("Category") +
+  theme(legend.position = "none") +
+  ggtitle("Number of item for category")
+```
