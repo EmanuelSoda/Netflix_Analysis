@@ -4,7 +4,6 @@ author: "Emanuel Michele Soda"
 date: "11/16/2021"
 output:
   html_document: 
-    theme: cosmo
   pdf_document: default
 editor_options:
   chunk_output_type: console
