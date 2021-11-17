@@ -1,0 +1,8 @@
+---
+title: "Index"
+output:
+  html_document:
+    df_print: paged
+---
+
+Check the  [Netflix Analysis Notebook](docs/Analisi.html) 
