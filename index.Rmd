@@ -1,8 +1,265 @@
 ---
-title: "Index"
+title: "Analysis Netflix"
+author: "Emanuel Michele Soda"
+date: "11/16/2021"
 output:
-  html_document:
-    df_print: paged
+  html_document: 
+    theme: cosmo
+  pdf_document: default
+editor_options:
+  chunk_output_type: console
 ---
 
-Check the  [Netflix Analysis Notebook](docs/Analisi.html) 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE
+)
+library(tidyverse)
+library(forecast)
+library(lubridate)
+```
+
+# Read data from the tidytuesday project 
+The datra are read from the tidytuesday repository using the 
+package __tidytuesdayR__. The table is trasformed into a tibble 
+for better visualizzation and all the character columns are  
+trasformed into factor.
+```{r eval=FALSE, include=FALSE}
+tuesdata <- tidytuesdayR::tt_load('2021-04-20')
+write_csv(x = tuesdata$netflix_titles, file = "data/tuesdata.csv")
+```
+
+Lets set the theme globally 
+```{r Set Theme, fig.height=12, fig.width=15}
+theme_set(theme_light())
+```
+
+
+```{r Read Data, fig.height=12, fig.width=15}
+data <- read_csv(file = "data/tuesdata.csv") %>%  
+  tibble() %>%  
+  mutate_if(is_character, factor) 
+```
+
+To have a first and quick look of the data we can use the summary function
+```{r Summary, fig.height=12, fig.width=15}
+data %>%  summary()
+```
+
+Lets check if there are __NA__ values. As can be seen the column which has
+more na values is director. NB: are plotted oly the column which contains 
+at least 1 __NA__.
+```{r NA values, fig.height=12, fig.width=15}
+data %>%
+  select(everything()) %>%  # replace to your needs
+  summarise_all(funs(sum(is.na(.)))) %>%  
+  pivot_longer(cols = everything()) %>% 
+  filter(value > 0) %>% 
+  
+  ggplot(., aes(x = value, y = reorder(name, -value), fill = name)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Set3") +
+  scale_x_log10() +
+  xlab("Number of NA values") + 
+  ylab("Column Name") + 
+  theme(legend.position = "bottom") 
+```
+
+# Data visualization
+As can the summary functio shows there are two type of item in the Netflix 
+collection __Movie__ and __TV show__, can be interesting to see the number 
+of those item released over year. To do this we can compute the cumulative 
+sum over time divided in the two groups. As can be seen from the line plot
+the number of film release is always bigger than the number of TV Show. 
+Moreover, as reported the y axis is in log scale, for this reason the trend 
+which is linear in the log scale is actually exponential.
+```{r Data manipulation, fig.height=12, fig.width=15}
+data %>% 
+  group_by(type, release_year) %>% 
+  summarize(n=n()) %>%  
+  mutate(cum = cumsum(n)) %>% 
+  
+ ggplot(., aes(x=release_year, y=cum, col=type)) +
+  geom_line() +
+  scale_y_log10()  +
+  scale_color_brewer(palette = "Dark2") + 
+  ylab("Log_10 of cumulative number of item released") +
+  xlab("Year") +
+  theme_light() +
+  theme(legend.position = "bottom") +
+  ggtitle("Cumlative number of Movie and TV Show released")
+```
+
+So, as can be imagine from the first plot the  number of film is much bigger 
+than the number of TV show
+```{r Trend over time, fig.height=12, fig.width=15}
+data %>%  
+  group_by(type) %>% 
+  count() %>% 
+  
+  ggplot(., aes(x = type, y = n, fill = type)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_light() +
+  ylab("Number of films") +
+  xlab("Type of item") +
+  theme(legend.position = "bottom")
+```
+
+Could be of interest to see the duration of each item. On this topic as to be 
+clarify that the duration is in minutes for what concern the Movie while is 
+in season for the TV  Shows. 
+```{r Boxplot duratin, fig.height=12, fig.width=15}
+data %>% 
+  mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>%  
+  group_by(type, duration)   %>% 
+  summarise(duration, .groups = "drop") %>%  
+  
+  ggplot(., aes(x = type, y = duration, fill = type)) +
+  geom_violin() +
+  #geom_boxplot() +
+  scale_fill_brewer(palette = "Dark2") +
+  theme_light() +
+  xlab("Type of item") +
+  theme(legend.position = "bottom")   +
+  facet_wrap("type", scales = "free") 
+
+```
+
+From the plot can be seen that some TV shows have more than 13 season. Lets
+find out which are.
+```{r TV shows > 13, fig.height=12, fig.width=15}
+data %>% 
+mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>%  
+  filter(type == "TV Show") %>%  
+  filter(duration > 13) %>%  
+  summarise(title, duration, cast, country, release_year, description)
+```
+
+
+From the plot can be seen that some Movies are longer than 250 minutes Lets
+find out which are.
+```{r Movie > 250, fig.height=12, fig.width=15}
+data %>% 
+mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>%  
+  filter(type == "Movie") %>%  
+  filter(duration > 250) %>%   
+  summarise(title, duration, cast, country, release_year, description)
+```
+
+Lets plot the top 3 cuntry by Movie and TV Shows.As can be seen from 
+the plot the US has the most Movie and TV Show released
+```{r Item for state, fig.height=12, fig.width=15}
+data %>%  
+  group_by(country, type) %>% 
+  count() %>% 
+  drop_na() %>% 
+  group_by(type) %>% 
+  slice_max(order_by = n, n = 3)   %>% 
+
+  ggplot(., aes(x = reorder(country, -n), y = n, fill= country)) +
+  geom_bar(stat="identity") +
+  #scale_y_log10() +
+  scale_fill_brewer(palette = "Set2") +
+  xlab("Country") +
+  ylab("Number of item") +
+  theme(legend.position = "top") + 
+  facet_wrap("type", scales = "free", ncol = 1)
+```
+
+Check how much item are present in each rating macro category
+```{r Item for rating, fig.height=12, fig.width=15}
+data %>%  
+  mutate(rating = 
+           case_when(rating %in% c('G','TV-Y','TV-G') ~ "Little_Kids_CT",
+                     rating %in% c('PG','TV-Y7','TV-Y7-FV','TV-PG') ~  "Older_Kids_CT",
+                     rating %in% c('PG-13','TV-14','TV-G') ~ "Teens_CT",
+                     rating %in% c('R','NC-17','TV-MA','NR','UR') ~ "Mature_CT")) %>%
+  group_by(rating) %>% 
+  drop_na() %>% 
+  count()  %>% 
+  
+  ggplot(., aes(x = reorder(rating, -n), y = n, fill = rating)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Set2") +
+  xlab("Rating") +
+  ylab("Number of item") +
+   theme(legend.position = "bottom") 
+```
+
+Check how much item are present in each rating macro category over time
+```{r Item for rating time, fig.height=12, fig.width=15}
+data %>%  
+  mutate(release_year = factor(release_year)) %>% 
+  mutate(rating = 
+           case_when(rating %in% c('G','TV-Y','TV-G') ~ "Little_Kids_CT",
+                     rating %in% c('PG','TV-Y7','TV-Y7-FV','TV-PG') ~  "Older_Kids_CT",
+                     rating %in% c('PG-13','TV-14','TV-G') ~ "Teens_CT",
+                     rating %in% c('R','NC-17','TV-MA','NR','UR') ~ "Mature_CT")) %>%
+  drop_na() %>% 
+  group_by(release_year, rating) %>%  count()  %>% 
+
+  ggplot(., aes(x = release_year, y = n, fill = rating)) +
+  geom_bar(stat="identity", position=position_dodge()) +
+  xlab("release_year") +
+  ylab("Number of item") +
+  theme(legend.position = "top", axis.text.x = element_text(angle = 45,
+                                                            hjust=1)) +
+  ggtitle("Number of item in the rating macro category over time") 
+```
+
+  
+
+
+Lets see the item on the Netflix catalog in which is present 
+__Leonardo DiCaprio__ as part of the cast.
+
+```{r Leonardo DiCaprio, fig.height=12, fig.width=15}
+data  %>% 
+  filter(str_detect(string = cast, regex('DiCaprio', ignore_case = T))) %>% 
+  summarise(title, type, cast) 
+```
+
+Lets see the item on the Netflix catalog in which is present 
+__Johnny Depp__ as part of the cast.
+```{r Johnny Depp, fig.height=12, fig.width=15}
+data  %>% 
+  filter(str_detect(string = cast, regex('Depp', ignore_case = T))) %>% 
+  summarise(title, type, cast) 
+```
+
+lets see the top 5 directorfor number of item present in Netflix
+```{r director, fig.height=12, fig.width=15}
+data %>% 
+  group_by(director) %>% 
+  count() %>% 
+  drop_na() %>% 
+  arrange(desc(n)) %>% 
+  head(10) %>% 
+  
+  ggplot(., aes(x = n, y = reorder(director, -n), fill= director)) +
+  geom_bar(stat="identity") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_light() +
+  xlab("Number of item") +
+  ylab("Director") +
+  theme(legend.position = "none") +
+  ggtitle("Number of item for director")
+  
+```
+
+Can be interest interesting to see if the duration of the Movies has changed 
+over time. As can be seen from the boxplot this is not the case.
+
+```{r Duration Movie over time, fig.height=12, fig.width=15}
+data %>% 
+  filter(type == "Movie") %>% 
+  mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>% 
+  ggplot(., aes(x=release_year, y= duration, 
+                group= release_year, fill = release_year)) + 
+  geom_boxplot(outlier.shape = NA) +
+  theme(legend.position = "none") + 
+  ggtitle("Duration in minutes of Movies over time")
+```
