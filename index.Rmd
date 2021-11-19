@@ -18,13 +18,31 @@ knitr::opts_chunk$set(
 library(tidyverse)
 library(forecast)
 library(lubridate)
+library(vroom)
 ```
 
 # Read data from the tidytuesday project 
-The datra are read from the tidytuesday repository using the 
-package __tidytuesdayR__. The table is trasformed into a tibble 
-for better visualizzation and all the character columns are  
+The data are read from the [tidytuesday repository](https://github.com/rfordatascience/tidytuesday/blob/master/data/2021/2021-04-20/readme.md) using the package __tidytuesdayR__. The table is trasformed into a 
+tibble for better visualizzation and all the character columns are 
 trasformed into factor.
+
+### Data table
+
+|variable     |class     |description |
+|:------------|:---------|:-----------|
+|show_id      |character | Unique ID for every Movie / Tv Show |
+|type         |character | Identifier - A Movie or TV Show |
+|title        |character | Title of the Movie / Tv Show |
+|director     |character | Director of the Movie/Show |
+|cast         |character | Actors involved in the movie / show |
+|country      |character | Country where the movie / show was produced |
+|date_added   |character | Date it was added on Netflix |
+|release_year |double    | Actual Release year of the movie / show|
+|rating       |character | TV Rating of the movie / show|
+|duration     |character | Total Duration - in minutes or number of seasons|
+|listed_in    |character | Genre |
+|description  |character | Summary description of the film/show |
+
 ```{r eval=FALSE, include=FALSE}
 tuesdata <- tidytuesdayR::tt_load('2021-04-20')
 write_csv(x = tuesdata$netflix_titles, file = "data/tuesdata.csv")
@@ -37,9 +55,12 @@ theme_set(theme_light())
 
 
 ```{r Read Data, fig.height=12, fig.width=15}
-data <- read_csv(file = "data/tuesdata.csv") %>%  
+data <- vroom("data/tuesdata.csv") %>%  
   tibble() %>%  
-  mutate_if(is_character, factor) 
+  mutate_if(is_character, factor)
+
+
+
 ```
 
 To have a first and quick look of the data we can use the summary function
@@ -51,8 +72,7 @@ Lets check if there are __NA__ values. As can be seen the column which has
 more na values is director. NB: are plotted oly the column which contains 
 at least 1 __NA__.
 ```{r NA values, fig.height=12, fig.width=15}
-data %>%
-  select(everything()) %>%  # replace to your needs
+data %>%# replace to your needs
   summarise_all(funs(sum(is.na(.)))) %>%  
   pivot_longer(cols = everything()) %>% 
   filter(value > 0) %>% 
@@ -67,7 +87,7 @@ data %>%
 ```
 
 # Data visualization
-As can the summary functio shows there are two type of item in the Netflix 
+As can the summary function shows there are two type of item in the Netflix 
 collection __Movie__ and __TV show__, can be interesting to see the number 
 of those item released over year. To do this we can compute the cumulative 
 sum over time divided in the two groups. As can be seen from the line plot
@@ -89,12 +109,14 @@ data %>%
   theme_light() +
   theme(legend.position = "bottom") +
   ggtitle("Cumlative number of Movie and TV Show released")
+
+
 ```
 
 So, as can be imagine from the first plot the  number of film is much bigger 
 than the number of TV show
 ```{r Trend over time, fig.height=12, fig.width=15}
-data %>%  
+data %>% 
   group_by(type) %>% 
   count() %>% 
   
@@ -112,9 +134,8 @@ clarify that the duration is in minutes for what concern the Movie while is
 in season for the TV  Shows. 
 ```{r Boxplot duratin, fig.height=12, fig.width=15}
 data %>% 
-  mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>%  
-  group_by(type, duration)   %>% 
-  summarise(duration, .groups = "drop") %>%  
+  mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>% 
+  summarise(type, duration, .groups = "drop") %>%  
   
   ggplot(., aes(x = type, y = duration, fill = type)) +
   geom_violin() +
@@ -143,12 +164,11 @@ find out which are.
 ```{r Movie > 250, fig.height=12, fig.width=15}
 data %>% 
 mutate(duration = as.integer(str_split_fixed(duration," ", 2)[, 1])) %>%  
-  filter(type == "Movie") %>%  
-  filter(duration > 250) %>%   
+  filter(type == "Movie"& duration > 250) %>%  
   summarise(title, duration, cast, country, release_year, description)
 ```
 
-Lets plot the top 3 cuntry by Movie and TV Shows.As can be seen from 
+Lets plot the top 3 country by Movie and TV Shows. As can be seen from 
 the plot the US has the most Movie and TV Show released
 ```{r Item for state, fig.height=12, fig.width=15}
 data %>%  
@@ -290,4 +310,23 @@ data %>%
   ylab("Category") +
   theme(legend.position = "none") +
   ggtitle("Number of item for category")
+
+
+data %>% 
+  mutate(listed_in = as.character(listed_in)) %>% 
+  mutate(category = if_else(condition = gsub(',.*','', listed_in) %in% category,
+                            true = gsub(',.*','', listed_in),
+                            false = "Not_Present"))  %>% 
+  filter(category == "LGBTQ Movies") %>%  
+  summarise(title, director, cast)
+
 ```
+
+
+```{r}
+data %>% 
+  filter(release_year > 2019 & release_year < 2021 & 
+           toupper(country) == toupper("United States")) %>%  View()
+```
+
+
